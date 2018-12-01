@@ -1,0 +1,8 @@
+[package]
+name = "sensulator"
+version = "0.1.0"
+authors = ["Todd Stellanova <tstellanova@users.noreply.github.com>"]
+
+[dependencies]
+rand = "0.6.1"
+
