@@ -12,11 +12,15 @@ use rand::distributions::{Normal, Distribution};
 pub type MeasureVal = f32;
 
 
+/// This many standard deviations (sigma) is the full error range; typically 3 sigma = 99.7% of values
+const STD_DEV_RANGE : MeasureVal  = 3 as MeasureVal;
+
 pub struct Sensulator {
   center_value: MeasureVal,
   offset_center_value: MeasureVal,
   relative_err_std_dev: MeasureVal,
   absolute_err_offset: MeasureVal,
+  
   simulated_reading_source: Box<rand::distributions::Normal>,
 }
 
@@ -40,7 +44,7 @@ impl Sensulator {
     //absolute error is a range, eg +/- 100 Pascals
     //here we calculate a concrete error offset from the range
     //randomized with a normal distribution
-    let std_dev = err_range / (3 as MeasureVal); //Assumes three standard deviations is full absolute error range
+    let std_dev = err_range.abs() / STD_DEV_RANGE; //Assumes three standard deviations is full absolute error range
     let abs_err_dist = Normal::new(0.into(), std_dev.into() );
     self.set_absolute_error_offset( abs_err_dist.sample(&mut rand::thread_rng()) as MeasureVal );
   }
@@ -49,12 +53,12 @@ impl Sensulator {
   ///
   /// Generally you should prefer `set_absolute_error_range` instead
   pub fn set_absolute_error_offset(&mut self, err_offset: MeasureVal)  {
-    self.absolute_err_offset = err_offset;
+    self.absolute_err_offset = err_offset.abs();
   }
   
   /// Set the sensor simulator's relative error: the precision of the sensor.
   pub fn set_relative_error(&mut self, err: MeasureVal) {
-    self.relative_err_std_dev = err / (3 as MeasureVal);// Assumes three standard deviations is full rel error range
+    self.relative_err_std_dev = err.abs() / STD_DEV_RANGE;
   }
   
   /// Set the sensor simulator's "actual" value.
@@ -67,13 +71,16 @@ impl Sensulator {
   
   /// Provide one simulated sensor reading
   pub fn read(&mut self) -> MeasureVal {
-    let cur_sample = self.simulated_reading_source.sample(&mut rand::thread_rng()) as MeasureVal;
-    cur_sample
+    // TODO pin to min / max values ? or accept that low STD_DEV_RANGE means some samples fall outside error range
+    self.simulated_reading_source.sample(&mut rand::thread_rng()) as MeasureVal
   }
 
 }
 
 
+#[cfg(test)]
+#[macro_use]
+extern crate quickcheck;
 
 #[cfg(test)]
 mod tests {
@@ -82,27 +89,69 @@ mod tests {
 
   const REL_ERR : MeasureVal  = 12 as MeasureVal;
   const ABS_ERR : MeasureVal = 100 as MeasureVal;
-  const CENTER_VAL: MeasureVal = 101325.0 as MeasureVal; // Average air pressure in Pascals
+  const CENTER_VAL: MeasureVal = 101325 as MeasureVal; 
+  /// How far outside the error range we allow rare outlier samples
+  const ERR_RANGE_ALLOWANCE: MeasureVal = 2 as MeasureVal;
+  
+  fn init_sensulator(abs_err: MeasureVal, rel_err: MeasureVal, ctr_val: MeasureVal) -> Sensulator{
+    let mut senso = Sensulator::new();
+    senso.set_absolute_error_range(abs_err);
+    senso.set_relative_error(rel_err);
+    senso.set_center_value(ctr_val);
+    senso
+  }
+  
+  /// Verify that sample readings are within the min and max range defined by absolute and relative errors.
+  fn sample_in_range(sample: MeasureVal, ctr_val: MeasureVal, abs_err: MeasureVal, rel_err: MeasureVal) -> bool {
+    let tru_abs_err = abs_err.abs() * ERR_RANGE_ALLOWANCE;
+    let tru_rel_err = rel_err.abs() * ERR_RANGE_ALLOWANCE;
+    let min_allowed = ctr_val - tru_abs_err - tru_rel_err;
+    let max_allowed = ctr_val + tru_abs_err + tru_rel_err;
+    
+    if (sample >= min_allowed) && (sample <= max_allowed) {
+      return true;
+    }
+    else {
+      println!("min: {} val: {} max: {}" , min_allowed, sample, max_allowed);
+      return false;
+    }
+  }
+  
+  #[test]
+  fn ordinary_config_values() {
+    let mut senso = init_sensulator(ABS_ERR, REL_ERR, CENTER_VAL);
+
+    for _x in 0..10000 {
+      let val = senso.read();
+      assert!(sample_in_range(val, CENTER_VAL, ABS_ERR, REL_ERR));
+    }
+    
+  }
+  
+  #[test]
+  fn edge_config_values() {
+    let abs_err = 0 as MeasureVal;
+    let rel_err = -1 as MeasureVal;
+    let ctr_val = 0 as MeasureVal;
+    
+    let mut senso = init_sensulator(abs_err, rel_err, ctr_val);
+    let val = senso.read();
+    assert!(sample_in_range(val, ctr_val, abs_err, rel_err));
+  }
   
   
   #[test]
-  fn init_with_values() {
-    let mut senso = Sensulator::new();
-    senso.set_absolute_error_range(ABS_ERR);
-    senso.set_relative_error(REL_ERR);
-    senso.set_center_value(CENTER_VAL);
-    
-    // Verify that sample readings are within the min and max range defined by
-    // absolute and relative errors.
-    let min_allowed = CENTER_VAL - ABS_ERR - REL_ERR;
-    let max_allowed = CENTER_VAL + ABS_ERR + REL_ERR;
-    for _x in 0..10000 {
-      let val = senso.read();
-      //println!("{} {} {}",min_allowed, val, max_allowed);
-      assert!(val >= min_allowed);
-      assert!(val <= max_allowed);
-    }
-    
+  quickcheck! {
+      fn check_output_range(abs_err: MeasureVal, rel_err: MeasureVal, ctr_val: MeasureVal) -> bool {
+          let mut senso = init_sensulator(abs_err, rel_err, ctr_val);
+          for _count in 0..100 {
+            let val = senso.read();
+            if !sample_in_range(val, ctr_val, abs_err, rel_err) {
+              return false;
+            }
+          }
+          true
+      }
   }
   
 }

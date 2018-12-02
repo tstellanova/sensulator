@@ -6,3 +6,6 @@ authors = ["Todd Stellanova <tstellanova@users.noreply.github.com>"]
 [dependencies]
 rand = "0.6.1"
 
+[dev-dependencies]
+quickcheck = "0.6"
+
