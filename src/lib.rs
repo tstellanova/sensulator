@@ -14,6 +14,7 @@ pub type MeasureVal = f32;
 
 /// This many standard deviations (sigma) is the full error range; typically 3 sigma = 99.7% of values
 const STD_DEV_RANGE : MeasureVal  = 3 as MeasureVal;
+const ZERO_VAL : MeasureVal=  0 as MeasureVal;
 
 pub struct Sensulator {
   center_value: MeasureVal,
@@ -25,19 +26,21 @@ pub struct Sensulator {
 }
 
 impl Sensulator {
-
-  pub fn new() -> Sensulator {
-    let zeroval =  0 as MeasureVal;
-    let this = Sensulator {
-        center_value: zeroval,
-        offset_center_value: zeroval,
-        relative_err_std_dev: zeroval,
-        absolute_err_offset: zeroval,
-        simulated_reading_source: Box::new(Normal::new(0 as f64, 666 as f64)),
+  
+  pub fn new(ctr_val: MeasureVal, abs_err_range: MeasureVal, rel_err: MeasureVal) -> Sensulator {
+    let mut this =  Sensulator {
+        center_value: ZERO_VAL,
+        offset_center_value: ZERO_VAL,
+        relative_err_std_dev: ZERO_VAL,
+        absolute_err_offset: ZERO_VAL,
+        simulated_reading_source: Box::new(Normal::new(ZERO_VAL as f64, 666 as f64)),
     };
-
+    this.set_absolute_error_range(abs_err_range);
+    this.set_relative_error(rel_err);
+    this.set_center_value(ctr_val);
     this
   }
+  
   
   /// Set the range of absolute error: the accuracy of the sensor.
   pub fn set_absolute_error_range(&mut self, err_range: MeasureVal) {
@@ -93,13 +96,6 @@ mod tests {
   /// How far outside the error range we allow rare outlier samples
   const ERR_RANGE_ALLOWANCE: MeasureVal = 2 as MeasureVal;
   
-  fn init_sensulator(abs_err: MeasureVal, rel_err: MeasureVal, ctr_val: MeasureVal) -> Sensulator{
-    let mut senso = Sensulator::new();
-    senso.set_absolute_error_range(abs_err);
-    senso.set_relative_error(rel_err);
-    senso.set_center_value(ctr_val);
-    senso
-  }
   
   /// Verify that sample readings are within the min and max range defined by absolute and relative errors.
   fn sample_in_range(sample: MeasureVal, ctr_val: MeasureVal, abs_err: MeasureVal, rel_err: MeasureVal) -> bool {
@@ -119,7 +115,7 @@ mod tests {
   
   #[test]
   fn ordinary_config_values() {
-    let mut senso = init_sensulator(ABS_ERR, REL_ERR, CENTER_VAL);
+    let mut senso = Sensulator::new(CENTER_VAL, ABS_ERR, REL_ERR);
 
     for _x in 0..10000 {
       let val = senso.read();
@@ -134,7 +130,7 @@ mod tests {
     let rel_err = -1 as MeasureVal;
     let ctr_val = 0 as MeasureVal;
     
-    let mut senso = init_sensulator(abs_err, rel_err, ctr_val);
+    let mut senso = Sensulator::new(ctr_val, abs_err, rel_err);
     let val = senso.read();
     assert!(sample_in_range(val, ctr_val, abs_err, rel_err));
   }
@@ -143,7 +139,7 @@ mod tests {
   #[test]
   quickcheck! {
       fn check_output_range(abs_err: MeasureVal, rel_err: MeasureVal, ctr_val: MeasureVal) -> bool {
-          let mut senso = init_sensulator(abs_err, rel_err, ctr_val);
+          let mut senso = Sensulator::new(ctr_val, abs_err, rel_err);
           for _count in 0..100 {
             let val = senso.read();
             if !sample_in_range(val, ctr_val, abs_err, rel_err) {
