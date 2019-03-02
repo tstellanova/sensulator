@@ -5,6 +5,8 @@ LICENSE: See LICENSE file
 
 #![crate_type = "lib"]
 
+use std::f32::NAN;
+
 extern crate rand;
 use rand::distributions::{Normal, Distribution};
 
@@ -21,6 +23,7 @@ pub struct Sensulator {
   offset_center_value: MeasureVal,
   relative_err_std_dev: MeasureVal,
   absolute_err_offset: MeasureVal,
+  last_measured_value: MeasureVal,
   
   simulated_reading_source: Box<rand::distributions::Normal>,
 }
@@ -34,6 +37,7 @@ impl Sensulator {
         relative_err_std_dev: ZERO_VAL,
         absolute_err_offset: ZERO_VAL,
         simulated_reading_source: Box::new(Normal::new(ZERO_VAL as f64, 666 as f64)),
+	last_measured_value: NAN,
     };
     this.set_absolute_error_range(abs_err_range);
     this.set_relative_error(rel_err);
@@ -74,10 +78,19 @@ impl Sensulator {
   
   /// Provide one simulated sensor reading
   pub fn read(&mut self) -> MeasureVal {
-    // TODO pin to min / max values ? or accept that low STD_DEV_RANGE means some samples fall outside error range
-    self.simulated_reading_source.sample(&mut rand::thread_rng()) as MeasureVal
+    self.measure()
   }
 
+  /// Take a new measurement
+  pub fn measure(&mut self) -> MeasureVal {
+    // TODO pin to min / max values ? or accept that low STD_DEV_RANGE means some samples fall outside error range
+    self.last_measured_value = self.simulated_reading_source.sample(&mut rand::thread_rng()) as MeasureVal;
+    self.last_measured_value
+  }
+
+  pub fn peek(&self) -> MeasureVal {
+    self.last_measured_value
+  }
 }
 
 
@@ -121,7 +134,15 @@ mod tests {
       let val = senso.read();
       assert!(sample_in_range(val, CENTER_VAL, ABS_ERR, REL_ERR));
     }
-    
+  }
+  #[test]
+  fn test_peek_matches_measure() {
+    let mut senso = Sensulator::new(CENTER_VAL, ABS_ERR, REL_ERR);
+
+    for _x in 0..10000 {
+      let val = senso.read();
+      assert_eq!(val, senso.peek());
+    }
   }
   
   #[test]
@@ -141,7 +162,7 @@ mod tests {
       fn check_output_range(abs_err: MeasureVal, rel_err: MeasureVal, ctr_val: MeasureVal) -> bool {
           let mut senso = Sensulator::new(ctr_val, abs_err, rel_err);
           for _count in 0..100 {
-            let val = senso.read();
+            let val = senso.measure();
             if !sample_in_range(val, ctr_val, abs_err, rel_err) {
               return false;
             }
