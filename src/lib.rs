@@ -101,7 +101,7 @@ extern crate quickcheck;
 #[cfg(test)]
 mod tests {
   
-  use ::{MeasureVal, Sensulator};
+  use super::*;
 
   const REL_ERR : MeasureVal  = 12 as MeasureVal;
   const ABS_ERR : MeasureVal = 100 as MeasureVal;
@@ -156,8 +156,6 @@ mod tests {
     assert!(sample_in_range(val, ctr_val, abs_err, rel_err));
   }
   
-  
-  #[test]
   quickcheck! {
       fn check_output_range(abs_err: MeasureVal, rel_err: MeasureVal, ctr_val: MeasureVal) -> bool {
           let mut senso = Sensulator::new(ctr_val, abs_err, rel_err);

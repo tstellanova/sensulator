@@ -4,6 +4,8 @@ A rust library for simulating sensor measurement behavior.
 
 ## example
 
+See [`main.rs`](src/main.rs)
+
 ```
   use sensulator::Sensulator;
   
@@ -25,6 +27,9 @@ A rust library for simulating sensor measurement behavior.
 
 
 ## Testing with quickcheck
+
+A brief quickcheck is run as part of `cargo test`; however, if you want to run more
+extensive tests, you can use something like:
 
 ```
 export QUICKCHECK_TESTS=1000000; cargo test -- --nocapture
