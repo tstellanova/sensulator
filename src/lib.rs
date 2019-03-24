@@ -15,7 +15,7 @@ pub type MeasureVal = f32;
 
 
 /// This many standard deviations (sigma) is the full error range; typically 3 sigma = 99.7% of values
-const STD_DEV_RANGE : MeasureVal  = 3 as MeasureVal;
+pub const STD_DEV_RANGE : MeasureVal  = 3 as MeasureVal;
 const ZERO_VAL : MeasureVal=  0 as MeasureVal;
 
 pub struct Sensulator {
@@ -30,6 +30,12 @@ pub struct Sensulator {
 
 impl Sensulator {
   
+
+  /// Initialize an instance with
+  /// - `ctr_vl` : The value that an ideal sensor would measure on every measurement.
+  /// - `abs_err_range` : The accuracy of the sensor.
+  /// - `rel_err`: The precision of the sensor.
+  ///
   pub fn new(ctr_val: MeasureVal, abs_err_range: MeasureVal, rel_err: MeasureVal) -> Sensulator {
     let mut this =  Sensulator {
         center_value: ZERO_VAL,
@@ -68,7 +74,7 @@ impl Sensulator {
     self.relative_err_std_dev = err.abs() / STD_DEV_RANGE;
   }
   
-  /// Set the sensor simulator's "actual" value.
+  /// Set the sensor simulator's "ideal" value.
   /// This will be adjusted by absolute and relative errors to provide simulated measurement noise.
   pub fn set_center_value(&mut self, val: MeasureVal) {
     self.center_value = val;
@@ -76,18 +82,14 @@ impl Sensulator {
     self.simulated_reading_source = Box::new(Normal::new(self.offset_center_value.into(), self.relative_err_std_dev.into()) );
   }
   
-  /// Provide one simulated sensor reading
-  pub fn read(&mut self) -> MeasureVal {
-    self.measure()
-  }
-
-  /// Take a new measurement
+  /// Take a new measurement. This method updates the measured value.
   pub fn measure(&mut self) -> MeasureVal {
     // TODO pin to min / max values ? or accept that low STD_DEV_RANGE means some samples fall outside error range
     self.last_measured_value = self.simulated_reading_source.sample(&mut rand::thread_rng()) as MeasureVal;
     self.last_measured_value
   }
 
+ /// Peek at the last measured value.  This does not update the measured value. 
   pub fn peek(&self) -> MeasureVal {
     self.last_measured_value
   }
@@ -131,7 +133,7 @@ mod tests {
     let mut senso = Sensulator::new(CENTER_VAL, ABS_ERR, REL_ERR);
 
     for _x in 0..10000 {
-      let val = senso.read();
+      let val = senso.measure();
       assert!(sample_in_range(val, CENTER_VAL, ABS_ERR, REL_ERR));
     }
   }
@@ -140,7 +142,7 @@ mod tests {
     let mut senso = Sensulator::new(CENTER_VAL, ABS_ERR, REL_ERR);
 
     for _x in 0..10000 {
-      let val = senso.read();
+      let val = senso.measure();
       assert_eq!(val, senso.peek());
     }
   }
@@ -152,7 +154,7 @@ mod tests {
     let ctr_val = 0 as MeasureVal;
     
     let mut senso = Sensulator::new(ctr_val, abs_err, rel_err);
-    let val = senso.read();
+    let val = senso.measure();
     assert!(sample_in_range(val, ctr_val, abs_err, rel_err));
   }
   

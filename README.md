@@ -1,6 +1,9 @@
 # sensulator
 
 A rust library for simulating sensor measurement behavior.
+You can initialize or update a sensulator with a central
+"ideal" value, and the sensulator will subsequently provide
+noisy sensor measurements centered around that value.
 
 ## example
 

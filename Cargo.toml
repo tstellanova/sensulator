@@ -2,6 +2,7 @@
 name = "sensulator"
 version = "0.4.0"
 authors = ["Todd Stellanova <tstellanova@users.noreply.github.com>"]
+repository = "https://github.com/tstellanova/sensulator"
 edition = "2018"
 
 [dependencies]
