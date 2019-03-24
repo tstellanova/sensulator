@@ -16,7 +16,10 @@ A rust library for simulating sensor measurement behavior.
   
   let mut fake_gps_lat = Sensulator::new(HOME_LAT, GPS_HORIZ_ABS_ERROR, GPS_HORIZ_REL_ERROR);
   loop {
-    println!("lat: {}", fake_gps_lat.read());
+    // update the sensor reading and display (requires a mutable sensulator reference)
+    println!("new lat: {}", fake_gps_lat.measure());
+    // simply display the last measured value (may use an immutable reference)
+    println!("old lat: {}", fake_gps_lat.peek());
   }
 ```
 
