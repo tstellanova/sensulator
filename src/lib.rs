@@ -7,8 +7,9 @@ LICENSE: See LICENSE file
 
 use std::f32::NAN;
 
-extern crate rand;
 use rand::distributions::{Normal, Distribution};
+use rand::rngs::SmallRng;
+use rand::FromEntropy;
 
 /// Standard resolution for sensor measurement values
 pub type MeasureVal = f32;
@@ -24,8 +25,8 @@ pub struct Sensulator {
   relative_err_std_dev: MeasureVal,
   absolute_err_offset: MeasureVal,
   last_measured_value: MeasureVal,
-  
   simulated_reading_source: Box<rand::distributions::Normal>,
+  local_rng: SmallRng,
 }
 
 impl Sensulator {
@@ -43,7 +44,9 @@ impl Sensulator {
         relative_err_std_dev: ZERO_VAL,
         absolute_err_offset: ZERO_VAL,
         simulated_reading_source: Box::new(Normal::new(ZERO_VAL as f64, 666 as f64)),
-	last_measured_value: NAN,
+	    last_measured_value: NAN,
+        local_rng: SmallRng::from_entropy()
+
     };
     this.set_absolute_error_range(abs_err_range);
     this.set_relative_error(rel_err);
@@ -59,6 +62,7 @@ impl Sensulator {
     //randomized with a normal distribution
     let std_dev = err_range.abs() / STD_DEV_RANGE; //Assumes three standard deviations is full absolute error range
     let abs_err_dist = Normal::new(0.into(), std_dev.into() );
+    //this is typically only invoked once, at setup time, so using thread_rng is probably ok
     self.set_absolute_error_offset( abs_err_dist.sample(&mut rand::thread_rng()) as MeasureVal );
   }
   
@@ -85,7 +89,7 @@ impl Sensulator {
   /// Take a new measurement. This method updates the measured value.
   pub fn measure(&mut self) -> MeasureVal {
     // TODO pin to min / max values ? or accept that low STD_DEV_RANGE means some samples fall outside error range
-    self.last_measured_value = self.simulated_reading_source.sample(&mut rand::thread_rng()) as MeasureVal;
+    self.last_measured_value = self.simulated_reading_source.sample(&mut self.local_rng) as MeasureVal;
     self.last_measured_value
   }
 
