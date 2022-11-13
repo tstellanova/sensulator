@@ -5,6 +5,7 @@ LICENSE: See LICENSE file
 
 #![crate_type = "lib"]
 #![no_std]
+
 use rand_distr::Normal;
 use rand_core::RngCore;
 use rand_distr::Distribution;

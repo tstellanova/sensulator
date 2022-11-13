@@ -1,20 +1,16 @@
 // Copyright 2019, Todd Stellanova
 // License: see LICENSE file
-
-
 #![no_main]
 #![no_std]
 
-use defmt::*;
-use defmt_rtt as _;
-use panic_probe as _;
-use cortex_m_rt as rt;
-use rt::entry;
+// use defmt::*;
+// use defmt_rtt as _; // global logger
+// use panic_probe as _;
 
 /// Example using the SmallRng , using no_std
 ///
 use sensulator::Sensulator;
-pub use rand_core::{SeedableRng};
+use rand_core::{SeedableRng};
 use rand::rngs::SmallRng;
 
 /// Latitude of Berkeley, California
@@ -25,7 +21,7 @@ const GPS_HORIZ_ABS_ERROR:f32 = 2e-6;
 const GPS_HORIZ_REL_ERROR:f32 = 4.5e-5;
 
 
-#[entry]
+#[cortex_m_rt::entry]
 fn main() -> ! {
   // create a predictable RNG starting with a seed
   const HAY_SEED: [u8; 32] = [
@@ -39,9 +35,24 @@ fn main() -> ! {
   let mut fake_gps_lat = Sensulator::new(HOME_LAT, GPS_HORIZ_ABS_ERROR, GPS_HORIZ_REL_ERROR, Box::new(my_rng));
   loop {
     // update the sensor reading and display (requires a mutable sensulator reference)
-    info!("new lat: {}", fake_gps_lat.measure());
+    println!("new lat: {}", fake_gps_lat.measure());
     // simply display the last measured value (may use an immutable reference)
-    info!("old lat: {}", fake_gps_lat.peek());
+    println!("old lat: {}", fake_gps_lat.peek());
   }
 }
 
+
+
+// same panicking *behavior* as `panic-probe` but doesn't print a panic message
+// this prevents the panic message being printed *twice* when `defmt::panic` is invoked
+#[defmt::panic_handler]
+fn panic() -> ! {
+  cortex_m::asm::udf()
+}
+
+/// Terminates the application and makes `probe-run` exit with exit-code = 0
+pub fn exit() -> ! {
+  loop {
+    cortex_m::asm::bkpt();
+  }
+}
