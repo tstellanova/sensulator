@@ -1,19 +1,21 @@
 /*
-Copyright (c) 2018 Todd Stellanova
+Copyright (c) 2022 Todd Stellanova
 LICENSE: See LICENSE file
 */
 
 #![crate_type = "lib"]
+#![no_std]
+use rand_distr::Normal;
+use rand_core::RngCore;
+use rand_distr::Distribution;
+use rand_distr::num_traits::Float;
 
-use std::f32::NAN;
-
-use rand::distributions::{Normal, Distribution};
-use rand::rngs::SmallRng;
-use rand::FromEntropy;
+extern crate alloc;
+use alloc::boxed::Box;
 
 /// Standard resolution for sensor measurement values
 pub type MeasureVal = f32;
-
+// pub type SampleSource = dyn Distribution<f32>;
 
 /// This many standard deviations (sigma) is the full error range; typically 3 sigma = 99.7% of values
 pub const STD_DEV_RANGE : MeasureVal  = 3 as MeasureVal;
@@ -25,8 +27,8 @@ pub struct Sensulator {
   relative_err_std_dev: MeasureVal,
   absolute_err_offset: MeasureVal,
   last_measured_value: MeasureVal,
-  simulated_reading_source: Box<rand::distributions::Normal>,
-  local_rng: SmallRng,
+  simulated_reading_source: rand_distr::Normal<MeasureVal>,
+  local_rng:  Box<dyn RngCore>,
 }
 
 impl Sensulator {
@@ -37,16 +39,17 @@ impl Sensulator {
   /// - `abs_err_range` : The accuracy of the sensor.
   /// - `rel_err`: The precision of the sensor.
   ///
-  pub fn new(ctr_val: MeasureVal, abs_err_range: MeasureVal, rel_err: MeasureVal) -> Sensulator {
+  pub fn new(ctr_val: MeasureVal, abs_err_range: MeasureVal, rel_err: MeasureVal, rng: Box<dyn RngCore>) -> Sensulator {
+
+    let source = Normal::new(ZERO_VAL as f32, 666 as f32).unwrap();
     let mut this =  Sensulator {
         center_value: ZERO_VAL,
         offset_center_value: ZERO_VAL,
         relative_err_std_dev: ZERO_VAL,
         absolute_err_offset: ZERO_VAL,
-        simulated_reading_source: Box::new(Normal::new(ZERO_VAL as f64, 666 as f64)),
-	    last_measured_value: NAN,
-        local_rng: SmallRng::from_entropy()
-
+        simulated_reading_source: source,
+	    last_measured_value: MeasureVal::NAN,
+        local_rng: rng, //TODO
     };
     this.set_absolute_error_range(abs_err_range);
     this.set_relative_error(rel_err);
@@ -60,10 +63,12 @@ impl Sensulator {
     //absolute error is a range, eg +/- 100 Pascals
     //here we calculate a concrete error offset from the range
     //randomized with a normal distribution
+    // let err_abs = if err_range < 0 { -err_range } else { err_range };
     let std_dev = err_range.abs() / STD_DEV_RANGE; //Assumes three standard deviations is full absolute error range
-    let abs_err_dist = Normal::new(0.into(), std_dev.into() );
-    //this is typically only invoked once, at setup time, so using thread_rng is probably ok
-    self.set_absolute_error_offset( abs_err_dist.sample(&mut rand::thread_rng()) as MeasureVal );
+    let abs_err_dist = Normal::<MeasureVal>::new(0f32.into(), std_dev.into() );
+    let err_off = abs_err_dist.expect("local_rng failed").sample(&mut self.local_rng) as MeasureVal;
+    //this is typically only invoked once, at setup time
+    self.set_absolute_error_offset( err_off);
   }
   
   /// Set the concrete offset of the simulator's "sensed" measurement from the actual value.
@@ -74,8 +79,8 @@ impl Sensulator {
   }
   
   /// Set the sensor simulator's relative error: the precision of the sensor.
-  pub fn set_relative_error(&mut self, err: MeasureVal) {
-    self.relative_err_std_dev = err.abs() / STD_DEV_RANGE;
+  pub fn set_relative_error(&mut self, rel_err: MeasureVal) {
+    self.relative_err_std_dev = rel_err.abs() / STD_DEV_RANGE;
   }
   
   /// Set the sensor simulator's "ideal" value.
@@ -83,7 +88,9 @@ impl Sensulator {
   pub fn set_center_value(&mut self, val: MeasureVal) {
     self.center_value = val;
     self.offset_center_value = self.center_value + self.absolute_err_offset;
-    self.simulated_reading_source = Box::new(Normal::new(self.offset_center_value.into(), self.relative_err_std_dev.into()) );
+    //    let source = Normal::new(ZERO_VAL as f32, 666 as f32).unwrap();
+    let new_source = Normal::new(self.offset_center_value.into(), self.relative_err_std_dev.into()).unwrap();
+    self.simulated_reading_source = new_source;
   }
   
   /// Take a new measurement. This method updates the measured value.
@@ -103,6 +110,8 @@ impl Sensulator {
 #[cfg(test)]
 #[macro_use]
 extern crate quickcheck;
+extern crate rand_core;
+// extern crate rand;
 
 #[cfg(test)]
 mod tests {
