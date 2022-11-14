@@ -9,8 +9,8 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
-rand_core = {version = "0.6.4", default-features = false, features = ["alloc"] }
-rand_distr = {version = "0.4.3", default-features = false, features = ["alloc"] }
+rand_core = {version = "0.6.4", default-features = false }
+rand_distr = {version = "0.4.3", default-features = false}
 
 [target.'cfg(unix)'.dev-dependencies]
 quickcheck = "0.6"
