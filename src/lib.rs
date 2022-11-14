@@ -6,13 +6,12 @@ LICENSE: See LICENSE file
 #![crate_type = "lib"]
 #![no_std]
 
-use rand_distr::Normal;
 use rand_core::RngCore;
 use rand_distr::Distribution;
 use rand_distr::num_traits::Float;
 
-extern crate alloc;
-use alloc::boxed::Box;
+// extern crate alloc;
+// use alloc::boxed::Box;
 
 /// Standard resolution for sensor measurement values
 pub type MeasureVal = f32;
@@ -22,27 +21,28 @@ pub type MeasureVal = f32;
 pub const STD_DEV_RANGE : MeasureVal  = 3 as MeasureVal;
 const ZERO_VAL : MeasureVal=  0 as MeasureVal;
 
-pub struct Sensulator {
+pub struct Sensulator<'a, T:RngCore>  {
   center_value: MeasureVal,
   offset_center_value: MeasureVal,
   relative_err_std_dev: MeasureVal,
   absolute_err_offset: MeasureVal,
   last_measured_value: MeasureVal,
   simulated_reading_source: rand_distr::Normal<MeasureVal>,
-  local_rng:  Box<dyn RngCore>,
+  local_rng: &'a mut T,
 }
 
-impl Sensulator {
+impl<T:RngCore> Sensulator<'_, T> {
   
 
   /// Initialize an instance with
   /// - `ctr_vl` : The value that an ideal sensor would measure on every measurement.
   /// - `abs_err_range` : The accuracy of the sensor.
   /// - `rel_err`: The precision of the sensor.
+  /// - `rng`: A random number generator to be used for simulation
   ///
-  pub fn new(ctr_val: MeasureVal, abs_err_range: MeasureVal, rel_err: MeasureVal, rng: Box<dyn RngCore>) -> Sensulator {
+  pub fn new(ctr_val: MeasureVal, abs_err_range: MeasureVal, rel_err: MeasureVal, rng: &mut T) -> Sensulator<T> {
 
-    let source = Normal::new(ZERO_VAL as f32, 666 as f32).unwrap();
+    let source = rand_distr::Normal::new(ZERO_VAL as f32, 666 as f32).unwrap();
     let mut this =  Sensulator {
         center_value: ZERO_VAL,
         offset_center_value: ZERO_VAL,
@@ -50,7 +50,7 @@ impl Sensulator {
         absolute_err_offset: ZERO_VAL,
         simulated_reading_source: source,
 	    last_measured_value: MeasureVal::NAN,
-        local_rng: rng, //TODO
+        local_rng: rng,
     };
     this.set_absolute_error_range(abs_err_range);
     this.set_relative_error(rel_err);
@@ -66,7 +66,7 @@ impl Sensulator {
     //randomized with a normal distribution
     // let err_abs = if err_range < 0 { -err_range } else { err_range };
     let std_dev = err_range.abs() / STD_DEV_RANGE; //Assumes three standard deviations is full absolute error range
-    let abs_err_dist = Normal::<MeasureVal>::new(0f32.into(), std_dev.into() );
+    let abs_err_dist = rand_distr::Normal::<MeasureVal>::new(0f32.into(), std_dev.into() );
     let err_off = abs_err_dist.expect("local_rng failed").sample(&mut self.local_rng) as MeasureVal;
     //this is typically only invoked once, at setup time
     self.set_absolute_error_offset( err_off);
@@ -90,7 +90,7 @@ impl Sensulator {
     self.center_value = val;
     self.offset_center_value = self.center_value + self.absolute_err_offset;
     //    let source = Normal::new(ZERO_VAL as f32, 666 as f32).unwrap();
-    let new_source = Normal::new(self.offset_center_value.into(), self.relative_err_std_dev.into()).unwrap();
+    let new_source = rand_distr::Normal::new(self.offset_center_value.into(), self.relative_err_std_dev.into()).unwrap();
     self.simulated_reading_source = new_source;
   }
   

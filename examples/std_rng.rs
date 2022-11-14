@@ -6,7 +6,6 @@
 ///
 use sensulator::Sensulator;
 use rand::SeedableRng;
-// use rand::rngs::SmallRng;
 use rand::rngs::StdRng;
 
 /// Latitude of Berkeley, California
@@ -24,11 +23,11 @@ fn main() {
   //   0xFE,0xED, 0xAB, 0xBA, 0xDE,0xAD, 0xBE, 0xEF,
   //   0xFE,0xED, 0xAB, 0xBA, 0xDE,0xAD, 0xBE, 0xEF,
   // ];
-  // let my_rng = rand::rngs::StdRng::from_seed(HAY_SEED);
+  // let mut my_rng = rand::rngs::StdRng::from_seed(HAY_SEED);
 
   // create an unpredictable RNG using std-provided entropy source
-  let my_rng = StdRng::from_entropy();
-  let mut fake_gps_lat = Sensulator::new(HOME_LAT, GPS_HORIZ_ABS_ERROR, GPS_HORIZ_REL_ERROR, Box::new(my_rng));
+  let mut my_rng = StdRng::from_entropy();
+  let mut fake_gps_lat = Sensulator::new(HOME_LAT, GPS_HORIZ_ABS_ERROR, GPS_HORIZ_REL_ERROR, &mut my_rng);
   loop {
     // update the sensor reading and display (requires a mutable sensulator reference)
     println!("new lat: {}", fake_gps_lat.measure());
