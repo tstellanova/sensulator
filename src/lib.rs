@@ -4,18 +4,15 @@ LICENSE: See LICENSE file
 */
 
 #![crate_type = "lib"]
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 
 use rand_core::RngCore;
 use rand_distr::Distribution;
-use rand_distr::num_traits::Float;
-
-// extern crate alloc;
-// use alloc::boxed::Box;
+#[cfg(no_std)]
+use num_traits::Float;
 
 /// Standard resolution for sensor measurement values
 pub type MeasureVal = f32;
-// pub type SampleSource = dyn Distribution<f32>;
 
 /// This many standard deviations (sigma) is the full error range; typically 3 sigma = 99.7% of values
 pub const STD_DEV_RANGE : MeasureVal  = 3 as MeasureVal;
@@ -32,7 +29,7 @@ pub struct Sensulator<'a, T:RngCore>  {
 }
 
 impl<T:RngCore> Sensulator<'_, T> {
-  
+
 
   /// Initialize an instance with
   /// - `ctr_vl` : The value that an ideal sensor would measure on every measurement.
@@ -42,13 +39,14 @@ impl<T:RngCore> Sensulator<'_, T> {
   ///
   pub fn new(ctr_val: MeasureVal, abs_err_range: MeasureVal, rel_err: MeasureVal, rng: &mut T) -> Sensulator<T> {
 
-    let source = rand_distr::Normal::new(ZERO_VAL as f32, 666 as f32).unwrap();
+    // let new_source = rand_distr::Normal::new(ctr_val.into(), self.relative_err_std_dev.into()).unwrap();
+    let tmp_source = rand_distr::Normal::new(ZERO_VAL as f32, 666 as f32).unwrap();
     let mut this =  Sensulator {
         center_value: ZERO_VAL,
         offset_center_value: ZERO_VAL,
         relative_err_std_dev: ZERO_VAL,
         absolute_err_offset: ZERO_VAL,
-        simulated_reading_source: source,
+        simulated_reading_source: tmp_source,
 	    last_measured_value: MeasureVal::NAN,
         local_rng: rng,
     };
@@ -57,8 +55,8 @@ impl<T:RngCore> Sensulator<'_, T> {
     this.set_center_value(ctr_val);
     this
   }
-  
-  
+
+
   /// Set the range of absolute error: the accuracy of the sensor.
   pub fn set_absolute_error_range(&mut self, err_range: MeasureVal) {
     //absolute error is a range, eg +/- 100 Pascals
@@ -71,29 +69,29 @@ impl<T:RngCore> Sensulator<'_, T> {
     //this is typically only invoked once, at setup time
     self.set_absolute_error_offset( err_off);
   }
-  
+
   /// Set the concrete offset of the simulator's "sensed" measurement from the actual value.
   ///
   /// Generally you should prefer `set_absolute_error_range` instead
   pub fn set_absolute_error_offset(&mut self, err_offset: MeasureVal)  {
     self.absolute_err_offset = err_offset.abs();
   }
-  
+
   /// Set the sensor simulator's relative error: the precision of the sensor.
   pub fn set_relative_error(&mut self, rel_err: MeasureVal) {
     self.relative_err_std_dev = rel_err.abs() / STD_DEV_RANGE;
   }
-  
+
   /// Set the sensor simulator's "ideal" value.
   /// This will be adjusted by absolute and relative errors to provide simulated measurement noise.
   pub fn set_center_value(&mut self, val: MeasureVal) {
     self.center_value = val;
     self.offset_center_value = self.center_value + self.absolute_err_offset;
-    //    let source = Normal::new(ZERO_VAL as f32, 666 as f32).unwrap();
-    let new_source = rand_distr::Normal::new(self.offset_center_value.into(), self.relative_err_std_dev.into()).unwrap();
+    let new_source = rand_distr::Normal::new(self.offset_center_value.into(),
+                                             self.relative_err_std_dev.into()).unwrap();
     self.simulated_reading_source = new_source;
   }
-  
+
   /// Take a new measurement. This method updates the measured value.
   pub fn measure(&mut self) -> MeasureVal {
     // TODO pin to min / max values ? or accept that low STD_DEV_RANGE means some samples fall outside error range
@@ -101,7 +99,7 @@ impl<T:RngCore> Sensulator<'_, T> {
     self.last_measured_value
   }
 
- /// Peek at the last measured value.  This does not update the measured value. 
+ /// Peek at the last measured value.  This does not update the measured value.
   pub fn peek(&self) -> MeasureVal {
     self.last_measured_value
   }
@@ -116,23 +114,27 @@ extern crate rand_core;
 
 #[cfg(test)]
 mod tests {
-  
+
   use super::*;
+  use rand::rngs::StdRng;
+  use crate::rand_core::SeedableRng;
+  // extern crate std;
+
 
   const REL_ERR : MeasureVal  = 12 as MeasureVal;
   const ABS_ERR : MeasureVal = 100 as MeasureVal;
-  const CENTER_VAL: MeasureVal = 101325 as MeasureVal; 
+  const CENTER_VAL: MeasureVal = 101325 as MeasureVal;
   /// How far outside the error range we allow rare outlier samples
   const ERR_RANGE_ALLOWANCE: MeasureVal = 2 as MeasureVal;
-  
-  
+
+
   /// Verify that sample readings are within the min and max range defined by absolute and relative errors.
   fn sample_in_range(sample: MeasureVal, ctr_val: MeasureVal, abs_err: MeasureVal, rel_err: MeasureVal) -> bool {
     let tru_abs_err = abs_err.abs() * ERR_RANGE_ALLOWANCE;
     let tru_rel_err = rel_err.abs() * ERR_RANGE_ALLOWANCE;
     let min_allowed = ctr_val - tru_abs_err - tru_rel_err;
     let max_allowed = ctr_val + tru_abs_err + tru_rel_err;
-    
+
     if (sample >= min_allowed) && (sample <= max_allowed) {
       return true;
     }
@@ -141,10 +143,11 @@ mod tests {
       return false;
     }
   }
-  
+
   #[test]
   fn ordinary_config_values() {
-    let mut senso = Sensulator::new(CENTER_VAL, ABS_ERR, REL_ERR);
+    let mut my_rng = StdRng::from_entropy();
+    let mut senso = Sensulator::new( CENTER_VAL, ABS_ERR, REL_ERR, &mut my_rng);
 
     for _x in 0..10000 {
       let val = senso.measure();
@@ -153,29 +156,32 @@ mod tests {
   }
   #[test]
   fn test_peek_matches_measure() {
-    let mut senso = Sensulator::new(CENTER_VAL, ABS_ERR, REL_ERR);
+    let mut my_rng = StdRng::from_entropy();
+    let mut senso = Sensulator::new(CENTER_VAL, ABS_ERR, REL_ERR, &mut my_rng);
 
     for _x in 0..10000 {
       let val = senso.measure();
       assert_eq!(val, senso.peek());
     }
   }
-  
+
   #[test]
   fn edge_config_values() {
     let abs_err = 0 as MeasureVal;
     let rel_err = -1 as MeasureVal;
     let ctr_val = 0 as MeasureVal;
-    
-    let mut senso = Sensulator::new(ctr_val, abs_err, rel_err);
+
+    let mut my_rng = StdRng::from_entropy();
+    let mut senso = Sensulator::new(ctr_val, abs_err, rel_err, &mut my_rng);
     let val = senso.measure();
     assert!(sample_in_range(val, ctr_val, abs_err, rel_err));
   }
-  
+
   quickcheck! {
       fn check_output_range(abs_err: MeasureVal, rel_err: MeasureVal, ctr_val: MeasureVal) -> bool {
-          let mut senso = Sensulator::new(ctr_val, abs_err, rel_err);
-          for _count in 0..100 {
+          let mut my_rng = StdRng::from_entropy();
+          let mut senso = Sensulator::new(ctr_val, abs_err, rel_err, &mut my_rng);
+          for _count in 0..1000 {
             let val = senso.measure();
             if !sample_in_range(val, ctr_val, abs_err, rel_err) {
               return false;
