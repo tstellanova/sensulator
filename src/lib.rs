@@ -8,8 +8,7 @@ LICENSE: See LICENSE file
 
 use rand_core::RngCore;
 use rand_distr::Distribution;
-#[cfg(no_std)]
-use num_traits::Float;
+use rand_distr::num_traits::Float;
 
 /// Standard resolution for sensor measurement values
 pub type MeasureVal = f32;
@@ -62,8 +61,14 @@ impl<T:RngCore> Sensulator<'_, T> {
     //absolute error is a range, eg +/- 100 Pascals
     //here we calculate a concrete error offset from the range
     //randomized with a normal distribution
+    let err_range_raw = if err_range.is_infinite() || err_range.is_nan() {
+      0 as MeasureVal
+    }
+    else {
+      err_range
+    };
     // let err_abs = if err_range < 0 { -err_range } else { err_range };
-    let std_dev = err_range.abs() / STD_DEV_RANGE; //Assumes three standard deviations is full absolute error range
+    let std_dev = err_range_raw.abs() / STD_DEV_RANGE; //Assumes three standard deviations is full absolute error range
     let abs_err_dist = rand_distr::Normal::<MeasureVal>::new(0f32.into(), std_dev.into() );
     let err_off = abs_err_dist.expect("local_rng failed").sample(&mut self.local_rng) as MeasureVal;
     //this is typically only invoked once, at setup time
@@ -79,7 +84,13 @@ impl<T:RngCore> Sensulator<'_, T> {
 
   /// Set the sensor simulator's relative error: the precision of the sensor.
   pub fn set_relative_error(&mut self, rel_err: MeasureVal) {
-    self.relative_err_std_dev = rel_err.abs() / STD_DEV_RANGE;
+    let rel_err_raw = if rel_err.is_infinite() || rel_err.is_nan() {
+      0 as MeasureVal
+    }
+    else {
+      rel_err
+    };
+    self.relative_err_std_dev = rel_err_raw.abs() / STD_DEV_RANGE;
   }
 
   /// Set the sensor simulator's "ideal" value.
