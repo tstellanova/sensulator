@@ -5,28 +5,18 @@ You can initialize or update a sensulator with a central
 "ideal" value, and the sensulator will subsequently provide
 noisy sensor measurements centered around that value.
 
+This library allows you to provide a random number generator (RNG)
+that could be based on either unpredictable, truly random behavior
+(such as `StdRng` when used with `std`) or predictable, reproducible 
+behavior when used with a `SeedableRng`.
+
+
+
 ## example
 
-See [`main.rs`](src/main.rs)
-
-```
-  use sensulator::Sensulator;
-  
-  /// Latitude of Berkeley, California
-  const HOME_LAT:f32 = 37.8716;
-  /// Absolute error of a typical GPS sensor (degrees)
-  const GPS_HORIZ_ABS_ERROR:f32 = 2e-6;
-  /// Relative error of a typical GPS sensor (degrees)
-  const GPS_HORIZ_REL_ERROR:f32 = 4.5e-5;
-  
-  let mut fake_gps_lat = Sensulator::new(HOME_LAT, GPS_HORIZ_ABS_ERROR, GPS_HORIZ_REL_ERROR);
-  loop {
-    // update the sensor reading and display (requires a mutable sensulator reference)
-    println!("new lat: {}", fake_gps_lat.measure());
-    // simply display the last measured value (may use an immutable reference)
-    println!("old lat: {}", fake_gps_lat.peek());
-  }
-```
+See examples:
+- [`predict_rng`](examples/predict_rng.rs)
+- [`std_rng`](examples/std_rng.rs)
 
 
 ## Testing with quickcheck
@@ -35,7 +25,7 @@ A brief quickcheck is run as part of `cargo test`; however, if you want to run m
 extensive tests, you can use something like:
 
 ```
-export QUICKCHECK_TESTS=1000000; cargo test -- --nocapture
+export QUICKCHECK_TESTS=1000; cargo test -- --nocapture
 ```
 
 
