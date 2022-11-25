@@ -14,8 +14,8 @@ use rand_distr::num_traits::Float;
 pub type MeasureVal = f32;
 
 /// This many standard deviations (sigma) is the full error range; typically 3 sigma = 99.7% of values
-pub const STD_DEV_RANGE : MeasureVal  = 3 as MeasureVal;
-const ZERO_VAL : MeasureVal=  0 as MeasureVal;
+pub const STD_DEV_RANGE : MeasureVal = 3 as MeasureVal;
+const ZERO_VAL : MeasureVal =  0 as MeasureVal;
 
 pub struct Sensulator<'a, T:RngCore>  {
   center_value: MeasureVal,
@@ -29,7 +29,6 @@ pub struct Sensulator<'a, T:RngCore>  {
 
 impl<T:RngCore> Sensulator<'_, T> {
 
-
   /// Initialize an instance with
   /// - `ctr_vl` : The value that an ideal sensor would measure on every measurement.
   /// - `abs_err_range` : The accuracy of the sensor.
@@ -38,7 +37,6 @@ impl<T:RngCore> Sensulator<'_, T> {
   ///
   pub fn new(ctr_val: MeasureVal, abs_err_range: MeasureVal, rel_err: MeasureVal, rng: &mut T) -> Sensulator<T> {
 
-    // let new_source = rand_distr::Normal::new(ctr_val.into(), self.relative_err_std_dev.into()).unwrap();
     let tmp_source = rand_distr::Normal::new(ZERO_VAL as f32, 666 as f32).unwrap();
     let mut this =  Sensulator {
         center_value: ZERO_VAL,
@@ -61,14 +59,11 @@ impl<T:RngCore> Sensulator<'_, T> {
     //absolute error is a range, eg +/- 100 Pascals
     //here we calculate a concrete error offset from the range
     //randomized with a normal distribution
-    let err_range_raw = if err_range.is_infinite() || err_range.is_nan() {
-      0 as MeasureVal
+    if err_range.is_infinite() || err_range.is_nan() {
+      panic!("Invalid absolute error: {}", err_range);
     }
-    else {
-      err_range
-    };
-    // let err_abs = if err_range < 0 { -err_range } else { err_range };
-    let std_dev = err_range_raw.abs() / STD_DEV_RANGE; //Assumes three standard deviations is full absolute error range
+
+    let std_dev = err_range.abs() / STD_DEV_RANGE; //Assumes three standard deviations is full absolute error range
     let abs_err_dist = rand_distr::Normal::<MeasureVal>::new(0f32.into(), std_dev.into() );
     let err_off = abs_err_dist.expect("local_rng failed").sample(&mut self.local_rng) as MeasureVal;
     //this is typically only invoked once, at setup time
@@ -84,18 +79,18 @@ impl<T:RngCore> Sensulator<'_, T> {
 
   /// Set the sensor simulator's relative error: the precision of the sensor.
   pub fn set_relative_error(&mut self, rel_err: MeasureVal) {
-    let rel_err_raw = if rel_err.is_infinite() || rel_err.is_nan() {
-      0 as MeasureVal
+    if rel_err.is_infinite() || rel_err.is_nan() {
+      panic!("Invalid relative error: {}", rel_err);
     }
-    else {
-      rel_err
-    };
-    self.relative_err_std_dev = rel_err_raw.abs() / STD_DEV_RANGE;
+    self.relative_err_std_dev = rel_err.abs() / STD_DEV_RANGE;
   }
 
   /// Set the sensor simulator's "ideal" value.
   /// This will be adjusted by absolute and relative errors to provide simulated measurement noise.
   pub fn set_center_value(&mut self, val: MeasureVal) {
+    if val.is_nan() {
+      panic!("Invalid center value: {}", val);
+    }
     self.center_value = val;
     self.offset_center_value = self.center_value + self.absolute_err_offset;
     let new_source = rand_distr::Normal::new(self.offset_center_value.into(),
@@ -121,19 +116,15 @@ impl<T:RngCore> Sensulator<'_, T> {
 #[macro_use]
 extern crate quickcheck;
 extern crate rand_core;
-// extern crate rand;
 
 #[cfg(test)]
 mod tests {
-
   use super::*;
   use rand::rngs::StdRng;
   use crate::rand_core::SeedableRng;
-  // extern crate std;
 
-
-  const REL_ERR : MeasureVal  = 12 as MeasureVal;
-  const ABS_ERR : MeasureVal = 100 as MeasureVal;
+  const REL_ERR: MeasureVal = 12 as MeasureVal;
+  const ABS_ERR: MeasureVal = 100 as MeasureVal;
   const CENTER_VAL: MeasureVal = 101325 as MeasureVal;
   /// How far outside the error range we allow rare outlier samples
   const ERR_RANGE_ALLOWANCE: MeasureVal = 2 as MeasureVal;
@@ -148,9 +139,8 @@ mod tests {
 
     if (sample >= min_allowed) && (sample <= max_allowed) {
       return true;
-    }
-    else {
-      println!("min: {} val: {} max: {}" , min_allowed, sample, max_allowed);
+    } else {
+      println!("min: {} val: {} max: {}", min_allowed, sample, max_allowed);
       return false;
     }
   }
@@ -158,13 +148,14 @@ mod tests {
   #[test]
   fn ordinary_config_values() {
     let mut my_rng = StdRng::from_entropy();
-    let mut senso = Sensulator::new( CENTER_VAL, ABS_ERR, REL_ERR, &mut my_rng);
+    let mut senso = Sensulator::new(CENTER_VAL, ABS_ERR, REL_ERR, &mut my_rng);
 
     for _x in 0..10000 {
       let val = senso.measure();
       assert!(sample_in_range(val, CENTER_VAL, ABS_ERR, REL_ERR));
     }
   }
+
   #[test]
   fn test_peek_matches_measure() {
     let mut my_rng = StdRng::from_entropy();
@@ -188,9 +179,128 @@ mod tests {
     assert!(sample_in_range(val, ctr_val, abs_err, rel_err));
   }
 
+  #[test]
+  fn boundary_config_values() {
+    let mut my_rng = StdRng::from_entropy();
+    let rel_err_range = MeasureVal::max_value();
+    // println!("min f32: {} max f32: {}", MeasureVal::min_value(), MeasureVal::max_value());
+    // println!("rel_err_range: {}",rel_err_range);
+    let mut senso = Sensulator::new(ZERO_VAL, ZERO_VAL, rel_err_range, &mut my_rng);
+
+    for _x in 0..10000 {
+      let val = senso.measure();
+      assert!(sample_in_range(val, ZERO_VAL, ZERO_VAL, rel_err_range));
+    }
+  }
+
+  #[test]
+  fn inf_ctr_value() {
+    let abs_err = 0 as MeasureVal;
+    let rel_err = -1 as MeasureVal;
+    let ctr_val = f32::infinity() as MeasureVal;
+
+    let mut my_rng = StdRng::from_entropy();
+    let mut senso = Sensulator::new(ctr_val, abs_err, rel_err, &mut my_rng);
+    let val = senso.measure();
+    assert!(val.is_infinite());
+  }
+
+  #[test]
+  #[should_panic]
+  fn abs_errors_infinite() {
+    let abs_err = MeasureVal::infinity();
+    let rel_err = ZERO_VAL;
+    let ctr_val = 1 as MeasureVal;
+
+    let mut my_rng = StdRng::from_entropy();
+    // this should panic
+    let mut senso = Sensulator::new(ctr_val, abs_err, rel_err, &mut my_rng);
+    let val = senso.measure();
+    assert!(val != ZERO_VAL);
+  }
+
+  #[test]
+  #[should_panic]
+  fn rel_errors_infinite() {
+    let abs_err = ZERO_VAL;
+    let rel_err = MeasureVal::infinity();
+    let ctr_val = 1 as MeasureVal;
+
+    let mut my_rng = StdRng::from_entropy();
+    // this should panic
+    let mut senso = Sensulator::new(ctr_val, abs_err, rel_err, &mut my_rng);
+    let val = senso.measure();
+    assert!(val != ZERO_VAL);
+  }
+
+  #[test]
+  #[should_panic]
+  fn ctr_val_infinite() {
+    let abs_err = ZERO_VAL;
+    let rel_err = ZERO_VAL;
+    let ctr_val = MeasureVal::infinity();
+
+    let mut my_rng = StdRng::from_entropy();
+    // this should panic
+    let mut senso = Sensulator::new(ctr_val, abs_err, rel_err, &mut my_rng);
+    let val = senso.measure();
+    assert_ne!(val, MeasureVal::infinity());
+  }
+
+  #[test]
+  #[should_panic]
+  fn abs_errors_nan() {
+    let abs_err = MeasureVal::nan();
+    let rel_err = ZERO_VAL;
+    let ctr_val = 1 as MeasureVal;
+
+    let mut my_rng = StdRng::from_entropy();
+    // this should panic
+    let mut senso = Sensulator::new(ctr_val, abs_err, rel_err, &mut my_rng);
+    let val = senso.measure();
+    assert!(val != ZERO_VAL);
+  }
+
+  #[test]
+  #[should_panic]
+  fn rel_errors_nan() {
+    let abs_err = ZERO_VAL;
+    let rel_err = MeasureVal::nan();
+    let ctr_val = 1 as MeasureVal;
+
+    let mut my_rng = StdRng::from_entropy();
+    // this should panic
+    let mut senso = Sensulator::new(ctr_val, abs_err, rel_err, &mut my_rng);
+    let val = senso.measure();
+    assert!(val != ZERO_VAL);
+  }
+
+  #[test]
+  #[should_panic]
+  fn ctr_val_nan() {
+    let abs_err = ZERO_VAL;
+    let rel_err = 1 as MeasureVal;
+    let ctr_val =  MeasureVal::nan();
+
+    let mut my_rng = StdRng::from_entropy();
+    // this should panic
+    let mut senso = Sensulator::new(ctr_val, abs_err, rel_err, &mut my_rng);
+    let val = senso.measure();
+    assert!(val != ZERO_VAL);
+  }
+
+
   quickcheck! {
       fn check_output_range(abs_err: MeasureVal, rel_err: MeasureVal, ctr_val: MeasureVal) -> bool {
           let mut my_rng = StdRng::from_entropy();
+          // simple way to ignore meaningless values
+          if abs_err.is_infinite() || rel_err.is_infinite() || ctr_val.is_infinite(){
+            return true;
+          }
+          if abs_err.is_nan() || rel_err.is_nan() || ctr_val.is_nan() {
+            return true;
+          }
+
           let mut senso = Sensulator::new(ctr_val, abs_err, rel_err, &mut my_rng);
           for _count in 0..1000 {
             let val = senso.measure();
